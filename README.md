@@ -24,20 +24,22 @@ Everything runs on your own computer. Nothing is uploaded anywhere.
 1. **Get the folder.** Download the ZIP (green **Code** button → Download ZIP) and unzip it, or `git clone` it.
 2. **Start it.**
 
-   **macOS — easiest:** open **Terminal** (Cmd+Space, type Terminal) and paste this one line:
+   **macOS:** double-clicking `Start (Mac).command` will be blocked the first time with
+   *"Apple could not verify … is free of malware"*. That's Gatekeeper reacting to any downloaded
+   file; it isn't a problem with the app. Skip it like this:
+
+   1. Open **Terminal** (press Cmd+Space, type `Terminal`, press Return).
+   2. **Drag `Start (Mac).command` from the folder into the Terminal window** and press Return.
+
+   That's it. Gatekeeper only checks things opened from Finder, not things run in Terminal.
+   After the first run the launcher clears the download flag, so double-clicking works from then on.
+
+   Don't have the folder yet? This one line in Terminal downloads and starts it (and installs Node.js
+   if needed). Re-run it any time to start again or pick up updates:
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/llantis/fantasy-sidebyside/main/install.sh | bash
    ```
-
-   It installs Node.js if you don't have it, downloads the app to `~/fantasy-sidebyside`, starts it,
-   and opens your browser. Re-run the same line any time to start it again (it also picks up updates).
-   You can skip step 1 entirely this way.
-
-   **macOS — double-click:** `Start (Mac).command`. Because the folder came from a download, macOS will
-   say *"Apple could not verify … is free of malware"*. That's Gatekeeper, not a problem with the file.
-   Click **Done**, open **System Settings → Privacy & Security**, scroll down to the message about
-   `Start (Mac).command`, click **Open Anyway**, then double-click the launcher again. Once only.
 
    **Windows:** double-click `Start (Windows).bat`. It installs Node.js with winget if needed.
 
