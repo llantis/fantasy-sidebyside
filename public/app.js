@@ -288,11 +288,11 @@ function mergeBursts(changes) {
     const t = new Date(e.at).getTime();
     let b = open.get(e.key);
     if (!b || t - b.lastAt >= BURST_WINDOW_MS) {
-      b = { key: e.key, name: e.name, pos: e.pos, team: e.team, firstAt: t, lastAt: t, count: 0, points: e.points, game: e.game, leagues: new Map() };
+      b = { key: e.key, name: e.name, pos: e.pos, team: e.team, firstAt: t, lastAt: t, count: 0, points: e.points, game: e.game, leagues: new Map(), events: [] };
       open.set(e.key, b);
       bursts.push(b);
     }
-    b.lastAt = t; b.count++; b.points = e.points; b.game = e.game;
+    b.lastAt = t; b.count++; b.points = e.points; b.game = e.game; b.events.push(e);
     for (const a of e.appearances) {
       const k = `${a.platform}|${a.league}|${a.side}`;
       const l = b.leagues.get(k) ?? { ...a, delta: 0, impact: 0 };
@@ -309,7 +309,32 @@ function mergeBursts(changes) {
   }).sort((a, b) => b.lastAt - a.lastAt);
 }
 
+// Rows the user has expanded; keyed by player + burst start so they survive re-renders.
+const feedOpen = new Set();
+const burstId = (e) => `${e.key}@${e.firstAt}`;
+
+// Detail grid for one burst: a line per raw update (time), a column per league the player is in.
+// A blank cell means that platform had not reported the play at that refresh.
+function burstDetail(e) {
+  const cols = e.appearances;   // one per league/side, in first-seen order
+  const head = cols.map((a) => `<th class="${a.side}">${esc(a.teamName)}<small>${esc(a.league)}</small></th>`).join('');
+  const rows = e.events.map((ev) => {
+    const cells = cols.map((a) => {
+      const hit = ev.appearances.find((x) => x.platform === a.platform && x.league === a.league && x.side === a.side);
+      return `<td class="num ${hit ? (hit.impact > 0 ? 'up' : hit.impact < 0 ? 'down' : '') : 'blank'}">${hit ? signed(hit.impact) : '·'}</td>`;
+    }).join('');
+    return `<tr><td class="num t">${hhmm(ev.at)}</td>${cells}<td class="num pts">${fmt(ev.points)}</td></tr>`;
+  }).join('');
+  const totals = cols.map((a) => `<td class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}"><b>${signed(a.impact)}</b></td>`).join('');
+  return `<tr class="detail"><td colspan="4"><table class="grid">
+    <thead><tr><th></th>${head}<th>player pts</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td class="t">total</td>${totals}<td></td></tr></tfoot>
+  </table></td></tr>`;
+}
+
 function changeRow(e) {
+  const open = feedOpen.has(burstId(e));
   const chips = e.appearances.map((a) =>
     `<span class="chip ${a.side}"><b class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}">${signed(a.impact)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`
   ).join('');
@@ -321,16 +346,16 @@ function changeRow(e) {
   const count = e.count > 1 ? `<span class="cnt">${e.count} updates</span>` : '';
   const rz = dotClass(e) === 'on rz' ? ' rz' : '';
   const big = Math.abs(e.delta) >= BIG_PLAY ? ' big' : '';
-  return `<tr class="${big.trim()}">
-    <td class="when num">${when}</td>
+  return `<tr class="row ${big.trim()} ${open ? 'open' : ''}" data-burst="${esc(burstId(e))}" title="Click to see each update, league by league">
+    <td class="when num"><span class="chev">${open ? '▾' : '▸'}</span>${when}</td>
     <td class="delta-cell num ${e.delta > 0 ? 'up' : 'down'}">${signed(e.delta)}</td>
     <td class="who${rz}">${playerBlock(e, '', count)}</td>
     <td class="lg">${chips}${net}</td>
-  </tr>`;
+  </tr>${open ? burstDetail(e) : ''}`;
 }
 
 function changesSection(raw) {
-  let list = feedOpts.merge ? mergeBursts(raw) : raw.map((e) => ({ ...e, firstAt: new Date(e.at).getTime(), lastAt: new Date(e.at).getTime(), count: 1 }));
+  let list = feedOpts.merge ? mergeBursts(raw) : raw.map((e) => ({ ...e, firstAt: new Date(e.at).getTime(), lastAt: new Date(e.at).getTime(), count: 1, events: [e] }));
   if (feedOpts.big) list = list.filter((e) => Math.abs(e.delta) >= BIG_PLAY);
   const shown = feedShowAll ? list : list.slice(0, FEED_SHOW);
   const rows = shown.map(changeRow).join('');
@@ -348,6 +373,13 @@ function wireFeedControls() {
   document.getElementById('optMerge')?.addEventListener('change', (ev) => { feedOpts.merge = ev.target.checked; save(); render(); });
   document.getElementById('optBig')?.addEventListener('change', (ev) => { feedOpts.big = ev.target.checked; save(); render(); });
   document.getElementById('feedMore')?.addEventListener('click', (ev) => { ev.preventDefault(); feedShowAll = !feedShowAll; render(); });
+  for (const tr of document.querySelectorAll('#changes tr.row')) {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.burst;
+      feedOpen.has(id) ? feedOpen.delete(id) : feedOpen.add(id);
+      render();
+    });
+  }
 }
 
 // =============================================================================
