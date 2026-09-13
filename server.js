@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { readConfig, writeConfig, normalizeConfig, redactConfig, isConfigured } from './lib/config.js';
 import { getNflState } from './lib/nfl.js';
 import { getSleeperMatchups, probeSleeper } from './lib/sleeper.js';
-import { getEspnMatchups, probeEspn } from './lib/espn.js';
+import { getEspnMatchups, probeEspn } from "./lib/espn.js";
+import { round1 } from "./lib/model.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, "public");
@@ -23,10 +24,44 @@ const PORT = Number(process.env.PORT) || config.port;
 // Polling
 // ---------------------------------------------------------------------------
 
-const emptySnapshot = () => ({ updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], errors: [] });
+const emptySnapshot = () => ({ updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], changes: [], errors: [] });
 let snapshot = emptySnapshot();
 let inFlight = null;
 let timer = null;
+
+// Recent scoring changes, newest first. Compared per (league, side, player) across refreshes and
+// grouped per player, with the effect on your margin in every league he appears in.
+const MAX_CHANGES = 150;
+const lastPoints = new Map();   // "platform|league|side|playerId" -> points
+let changes = [];
+
+function detectChanges(matchups, at) {
+  const byPlayer = new Map();
+  for (const m of matchups) {
+    if (m.error || !m.me) continue;
+    for (const side of ["me", "opp"]) {
+      const s = m[side];
+      if (!s) continue;
+      for (const p of s.starters) {
+        if (p.id.startsWith("empty-")) continue;
+        const k = `${m.platform}|${m.leagueId}|${side}|${p.id}`;
+        const prev = lastPoints.get(k);
+        lastPoints.set(k, p.points);
+        if (prev == null || prev === p.points) continue;
+        const delta = round1(p.points - prev);
+        if (!byPlayer.has(p.key)) {
+          byPlayer.set(p.key, { at, key: p.key, name: p.name, pos: p.pos, team: p.team, points: p.points, delta, game: p.game, appearances: [] });
+        }
+        byPlayer.get(p.key).appearances.push({
+          platform: m.platform, league: m.leagueName, side, teamName: s.teamName, delta,
+          impact: side === "me" ? delta : -delta,
+        });
+      }
+    }
+  }
+  const fresh = [...byPlayer.values()].map((e) => ({ ...e, netImpact: round1(e.appearances.reduce((a, x) => a + x.impact, 0)) }));
+  if (fresh.length) changes = [...fresh, ...changes].slice(0, MAX_CHANGES);
+}
 
 async function refresh() {
   if (inFlight) return inFlight;
@@ -39,7 +74,9 @@ async function refresh() {
       if (config.sleeper) jobs.push(getSleeperMatchups(config.sleeper, nfl, CACHE_DIR).catch((e) => { errors.push(`Sleeper: ${e.message}`); return []; }));
       if (config.espn) jobs.push(getEspnMatchups(config.espn, nfl).catch((e) => { errors.push(`ESPN: ${e.message}`); return []; }));
       const matchups = (await Promise.all(jobs)).flat();
-      snapshot = { updatedAt: new Date().toISOString(), season: nfl.season, week: nfl.week, refreshSeconds: config.refreshSeconds, matchups, errors };
+      const updatedAt = new Date().toISOString();
+      detectChanges(matchups, updatedAt);
+      snapshot = { updatedAt, season: nfl.season, week: nfl.week, refreshSeconds: config.refreshSeconds, matchups, changes, errors };
     } catch (e) {
       errors.push(`NFL scoreboard: ${e.message}`);
       snapshot = { ...snapshot, errors };

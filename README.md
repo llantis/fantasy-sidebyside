@@ -15,6 +15,8 @@ What's on the page:
 - **My key players** — on your team in 2+ leagues.
 - **Controversial** — on your team in one league and against you in another.
 - **Enemy key players** — started against you in 2+ leagues.
+- **Recent changes** — every scoring change since the app started, newest first, with the effect on
+  your margin in each league the player appears in (positive if he is yours, negative if he is against you).
 
 Everything runs on your own computer. Nothing is uploaded anywhere.
 

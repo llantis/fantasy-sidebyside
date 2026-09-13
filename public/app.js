@@ -54,19 +54,7 @@ function sortMatchups(matchups) {
 // Cross-league identity (Key / Controversial people)
 // =============================================================================
 
-// Sleeper and ESPN use different player IDs, so players are matched across platforms by
-// normalized name + position. Defenses are matched by NFL team, since the platforms name
-// them differently ("Philadelphia Eagles" vs "Eagles D/ST").
-function playerKey(p) {
-  if (p.pos === 'DEF') return `DEF|${p.team || p.name}`;
-  const name = String(p.name || '')
-    .toLowerCase()
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, '')
-    .replace(/[^a-z ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return `${name}|${p.pos}`;
-}
+// Players are matched across platforms by `p.key`, stamped by the server (see lib/model.js playerKey).
 
 // Groups every starter across all matchups, then splits into three lists:
 //   controversial — on your team in at least one league AND against you in at least one
@@ -78,7 +66,7 @@ function crossLeaguePlayers(matchups) {
     if (m.error || !m.me) continue;
     const add = (p, side) => {
       if (!p || p.id?.startsWith('empty-')) return;
-      const k = playerKey(p);
+      const k = p.key;
       if (!groups.has(k)) groups.set(k, { player: p, mine: [], theirs: [] });
       const g = groups.get(k);
       if ((p.points ?? 0) > (g.player.points ?? 0)) g.player = p; // show the freshest-looking copy
@@ -276,6 +264,36 @@ function section(title, hint, list, emptyText) {
 }
 
 // =============================================================================
+// Recent changes feed
+// =============================================================================
+
+const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
+const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+function changeRow(e) {
+  const chips = e.appearances.map((a) => {
+    const good = a.impact > 0, bad = a.impact < 0;
+    const who = a.side === 'me' ? 'you' : `vs ${esc(a.teamName)}`;
+    return `<span class="chip ${a.side}"><b class="num ${good ? 'up' : bad ? 'down' : ''}">${signed(a.impact)}</b> · ${who} · ${esc(a.league)}</span>`;
+  }).join('');
+  const net = e.appearances.length > 1
+    ? `<div class="net num ${e.netImpact > 0 ? 'up' : e.netImpact < 0 ? 'down' : ''}">net ${signed(e.netImpact)}</div>` : '';
+  const rz = dotClass(e) === 'on rz' ? ' rz' : '';
+  return `<tr>
+    <td class="when num">${hhmm(e.at)}</td>
+    <td class="delta-cell num ${e.delta > 0 ? 'up' : 'down'}">${signed(e.delta)}</td>
+    <td class="who${rz}">${playerBlock(e)}</td>
+    <td class="lg">${chips}${net}</td>
+  </tr>`;
+}
+
+function changesSection(list) {
+  const rows = list.slice(0, 40).map(changeRow).join('');
+  const body = rows ? `<table>${rows}</table>` : '<div class="none">No scoring changes yet since the app started. They appear here as points come in.</div>';
+  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · effect on your margin in each league</span></div>${body}</div>`;
+}
+
+// =============================================================================
 // Render
 // =============================================================================
 
@@ -297,6 +315,7 @@ function render() {
       'Nobody is both for you and against you this week.') +
     section('Enemy key players', 'against you in 2+ leagues', theirs,
       'No opponent starts the same player against you in more than one league this week.');
+  document.getElementById('changes').innerHTML = changesSection(snap.changes || []);
 }
 
 document.getElementById('refreshBtn').addEventListener('click', () => load(true));
