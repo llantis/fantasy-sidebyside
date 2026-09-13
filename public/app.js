@@ -373,12 +373,12 @@ function burstDetail(e) {
   const rows = e.statEvents.map((ev) => {
     const cells = cols.map((a) => {
       const hit = ev.leagues.get(`${a.platform}|${a.league}|${a.side}`);
-      return `<td class="num ${hit ? (hit.impact > 0 ? 'up' : hit.impact < 0 ? 'down' : '') : 'blank'}">${hit ? signed(hit.impact) : '·'}</td>`;
+      return `<td class="num ${hit ? (hit.delta > 0 ? 'up' : hit.delta < 0 ? 'down' : '') : 'blank'}">${hit ? signed(hit.delta) : '·'}</td>`;
     }).join('');
     const play = ev.kind === 'stat' ? `<td class="ev" title="${esc(tip)}">${esc(ev.text)}</td>` : `<td class="ev muted" title="Points moved without a matching stat change: a late report or a scoring correction.">correction / late</td>`;
     return `<tr><td class="num t">${hhmm(new Date(ev.firstAt).toISOString())}</td>${play}${cells}<td class="num pts">${fmt(ev.points)}</td></tr>`;
   }).join('');
-  const totals = cols.map((a) => `<td class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}"><b>${signed(a.impact)}</b></td>`).join('');
+  const totals = cols.map((a) => `<td class="num ${a.delta > 0 ? 'up' : a.delta < 0 ? 'down' : ''}"><b>${signed(a.delta)}</b></td>`).join('');
   return `<tr class="detail"><td colspan="4"><table class="grid">
     <thead><tr><th></th><th class="ev">play</th>${head}<th>player pts</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -389,10 +389,10 @@ function burstDetail(e) {
 function changeRow(e) {
   const open = feedOpen.has(burstId(e));
   const chips = e.appearances.map((a) =>
-    `<span class="chip ${a.side}"><b class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}">${signed(a.impact)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`
+    `<span class="chip ${a.side}"><b class="num ${a.delta > 0 ? 'up' : a.delta < 0 ? 'down' : ''}">${signed(a.delta)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`
   ).join('');
   const net = e.appearances.length > 1
-    ? `<div class="net num ${e.netImpact > 0 ? 'up' : e.netImpact < 0 ? 'down' : ''}">net ${signed(e.netImpact)}</div>` : '';
+    ? `<div class="net num ${e.netImpact > 0 ? 'up' : e.netImpact < 0 ? 'down' : ''}">net for you ${signed(e.netImpact)}</div>` : '';
   const when = e.count > 1 && hhmm(new Date(e.firstAt).toISOString()) !== hhmm(new Date(e.lastAt).toISOString())
     ? `${hhmm(new Date(e.firstAt).toISOString())}<br>–${hhmm(new Date(e.lastAt).toISOString())}`
     : hhmm(new Date(e.lastAt).toISOString());
@@ -426,7 +426,7 @@ function changesSection(raw) {
   const body = rows ? `<table>${rows}</table>${more}` : '<div class="none">No scoring changes yet since the app started. They appear here as points come in.</div>';
   const opts = `<label class="opt"><input type="checkbox" id="optMerge" ${feedOpts.merge ? 'checked' : ''}> merge bursts</label>
     <label class="opt"><input type="checkbox" id="optBig" ${feedOpts.big ? 'checked' : ''}> big plays only (${BIG_PLAY}+)</label>`;
-  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · grouped by play · effect on your margin in each league</span><span class="opts">${opts}</span></div>${body}</div>`;
+  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · grouped by play · points as the player scored them in each league</span><span class="opts">${opts}</span></div>${body}</div>`;
 }
 
 function wireFeedControls() {
