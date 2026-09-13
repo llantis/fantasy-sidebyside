@@ -3,7 +3,7 @@
 // The server (server.js) polls Sleeper / ESPN and keeps one snapshot. This file fetches that
 // snapshot on the same interval and renders it. Data shapes are documented in lib/model.js.
 
-'use strict';
+import { formatDelta, formatLine, sumDeltas } from './statfmt.js';
 
 // =============================================================================
 // State & fetching
@@ -148,7 +148,7 @@ function subLine(p) {
 }
 
 // The player block used in lineup rows and in the people sections.
-function playerBlock(p, extraCls = '', nameSuffix = '') {
+function playerBlock(p, extraCls = '', nameSuffix = '', extraSub = '') {
   const g = p.game || { state: 'bye' };
   const cls = ['pl', extraCls, g.state === 'post' ? 'done' : '', g.state === 'pre' ? 'pre' : '', g.state === 'bye' ? 'bye' : '']
     .filter(Boolean).join(' ');
@@ -157,7 +157,7 @@ function playerBlock(p, extraCls = '', nameSuffix = '') {
     <span class="dot ${dotClass(p)}"></span>
     <div class="info">
       <div class="nm">${esc(p.name)}${inj}${nameSuffix}</div>
-      <div class="sub">${subLine(p)}</div>
+      <div class="sub">${subLine(p)}</div>${extraSub}
     </div>
     <div class="pts num"><span class="a">${fmtPts(p)}</span><span class="pj">proj ${fmt(p.projected)}</span></div>
   </div>`;
@@ -301,12 +301,63 @@ function mergeBursts(changes) {
       b.leagues.set(k, l);
     }
   }
-  return bursts.map((b) => {
-    const appearances = [...b.leagues.values()];
-    const delta = appearances.reduce((m, a) => Math.abs(a.delta) > Math.abs(m) ? a.delta : m, 0);
-    const netImpact = Math.round(appearances.reduce((s, a) => s + a.impact, 0) * 100) / 100;
-    return { ...b, appearances, delta, netImpact };
-  }).sort((a, b) => b.lastAt - a.lastAt);
+  return bursts.map(finishBurst).sort((a, b) => b.lastAt - a.lastAt);
+}
+
+// Per-league totals, headline delta, and the stat-event breakdown for a burst.
+function finishBurst(b) {
+  const appearances = [...b.leagues.values()];
+  const delta = appearances.reduce((m, a) => Math.abs(a.delta) > Math.abs(m) ? a.delta : m, 0);
+  const netImpact = Math.round(appearances.reduce((s, a) => s + a.impact, 0) * 100) / 100;
+  const statEvents = groupStatEvents(b.events, b.pos);
+  const statDelta = statEvents.filter((e) => e.kind === 'stat').map((e) => e.delta).reduce(sumDeltas, null);
+  const lastLine = [...b.events].reverse().find((ev) => ev.stats?.line)?.stats.line ?? null;
+  return {
+    ...b, appearances, delta, netImpact, statEvents,
+    statText: statDelta ? formatDelta(b.pos, statDelta) : '',
+    lineText: lastLine ? formatLine(b.pos, lastLine) : '',
+  };
+}
+
+// Fold a burst's raw changes into stat events: a change carrying a stat delta ("+1 rec, +32 yds")
+// opens an event; a points-only change (the other platform catching up, or a correction) joins
+// the latest event if it is under EVENT_ATTACH_MS old, otherwise stands alone as "correction / late".
+// A stat change arriving just after a points-only event upgrades it (points landed a poll early).
+const EVENT_ATTACH_MS = 3 * 60 * 1000;
+function groupStatEvents(events, pos) {
+  const out = [];
+  const fold = (e, ev) => {
+    e.lastAt = new Date(ev.at).getTime(); e.points = ev.points; e.changes.push(ev);
+    if (ev.stats?.line) e.line = ev.stats.line;
+    for (const a of ev.appearances) {
+      const k = `${a.platform}|${a.league}|${a.side}`;
+      const l = e.leagues.get(k) ?? { ...a, delta: 0, impact: 0 };
+      l.delta = Math.round((l.delta + a.delta) * 100) / 100;
+      l.impact = Math.round((l.impact + a.impact) * 100) / 100;
+      e.leagues.set(k, l);
+    }
+  };
+  const open = (kind, ev) => {
+    const t = new Date(ev.at).getTime();
+    const e = { kind, firstAt: t, lastAt: t, delta: kind === 'stat' ? ev.stats.delta : null, points: ev.points, line: null, changes: [], leagues: new Map() };
+    fold(e, ev); out.push(e);
+  };
+  for (const ev of events) {
+    const t = new Date(ev.at).getTime();
+    const last = out[out.length - 1];
+    const recent = last && t - last.lastAt < EVENT_ATTACH_MS;
+    // A league never reports the same play twice: if one of this change's leagues is already in
+    // the last event, this is a new play (or a correction), not the other platform catching up.
+    const sameLeague = last && ev.appearances.some((a) => last.leagues.has(`${a.platform}|${a.league}|${a.side}`));
+    if (ev.stats?.text) {
+      if (recent && last.kind === 'points' && !sameLeague) { last.kind = 'stat'; last.delta = ev.stats.delta; fold(last, ev); continue; }
+      open('stat', ev); continue;
+    }
+    if (recent && !sameLeague) { fold(last, ev); continue; }
+    open('points', ev);
+  }
+  for (const e of out) e.text = e.kind === 'stat' ? formatDelta(pos, e.delta) : '';
+  return out;
 }
 
 // Rows the user has expanded; keyed by player + burst start so they survive re-renders.
@@ -318,18 +369,20 @@ const burstId = (e) => `${e.key}@${e.firstAt}`;
 function burstDetail(e) {
   const cols = e.appearances;   // one per league/side, in first-seen order
   const head = cols.map((a) => `<th class="${a.side}">${esc(a.teamName)}<small>${esc(a.league)}</small></th>`).join('');
-  const rows = e.events.map((ev) => {
+  const tip = 'From the live NFL stat feed. If a platform posts two plays in one update, both land on the latest play; per-league totals stay exact.';
+  const rows = e.statEvents.map((ev) => {
     const cells = cols.map((a) => {
-      const hit = ev.appearances.find((x) => x.platform === a.platform && x.league === a.league && x.side === a.side);
+      const hit = ev.leagues.get(`${a.platform}|${a.league}|${a.side}`);
       return `<td class="num ${hit ? (hit.impact > 0 ? 'up' : hit.impact < 0 ? 'down' : '') : 'blank'}">${hit ? signed(hit.impact) : '·'}</td>`;
     }).join('');
-    return `<tr><td class="num t">${hhmm(ev.at)}</td>${cells}<td class="num pts">${fmt(ev.points)}</td></tr>`;
+    const play = ev.kind === 'stat' ? `<td class="ev" title="${esc(tip)}">${esc(ev.text)}</td>` : `<td class="ev muted" title="Points moved without a matching stat change: a late report or a scoring correction.">correction / late</td>`;
+    return `<tr><td class="num t">${hhmm(new Date(ev.firstAt).toISOString())}</td>${play}${cells}<td class="num pts">${fmt(ev.points)}</td></tr>`;
   }).join('');
   const totals = cols.map((a) => `<td class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}"><b>${signed(a.impact)}</b></td>`).join('');
   return `<tr class="detail"><td colspan="4"><table class="grid">
-    <thead><tr><th></th>${head}<th>player pts</th></tr></thead>
+    <thead><tr><th></th><th class="ev">play</th>${head}<th>player pts</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td class="t">total</td>${totals}<td></td></tr></tfoot>
+    <tfoot><tr><td class="t">total</td><td class="ev">${esc(e.statText)}</td>${totals}<td></td></tr></tfoot>
   </table></td></tr>`;
 }
 
@@ -346,16 +399,24 @@ function changeRow(e) {
   const count = e.count > 1 ? `<span class="cnt">${e.count} updates</span>` : '';
   const rz = dotClass(e) === 'on rz' ? ' rz' : '';
   const big = Math.abs(e.delta) >= BIG_PLAY ? ' big' : '';
+  const statSub = (e.statText || e.lineText)
+    ? `<div class="sub stat">${e.statText ? `<b class="sd">${esc(e.statText)}</b>` : ''}${e.lineText ? `<span class="sl">${e.statText ? ' · ' : ''}${esc(e.lineText)}</span>` : ''}</div>`
+    : '';
   return `<tr class="row ${big.trim()} ${open ? 'open' : ''}" data-burst="${esc(burstId(e))}" title="Click to see each update, league by league">
     <td class="when num"><span class="chev">${open ? '▾' : '▸'}</span>${when}</td>
     <td class="delta-cell num ${e.delta > 0 ? 'up' : 'down'}">${signed(e.delta)}</td>
-    <td class="who${rz}">${playerBlock(e, '', count)}</td>
+    <td class="who${rz}">${playerBlock(e, '', count, statSub)}</td>
     <td class="lg">${chips}${net}</td>
   </tr>${open ? burstDetail(e) : ''}`;
 }
 
 function changesSection(raw) {
-  let list = feedOpts.merge ? mergeBursts(raw) : raw.map((e) => ({ ...e, firstAt: new Date(e.at).getTime(), lastAt: new Date(e.at).getTime(), count: 1, events: [e] }));
+  const asBurst = (e) => {
+    const t = new Date(e.at).getTime();
+    const leagues = new Map(e.appearances.map((a) => [`${a.platform}|${a.league}|${a.side}`, { ...a }]));
+    return finishBurst({ key: e.key, name: e.name, pos: e.pos, team: e.team, firstAt: t, lastAt: t, count: 1, points: e.points, game: e.game, leagues, events: [e] });
+  };
+  let list = feedOpts.merge ? mergeBursts(raw) : raw.map(asBurst);
   if (feedOpts.big) list = list.filter((e) => Math.abs(e.delta) >= BIG_PLAY);
   const shown = feedShowAll ? list : list.slice(0, FEED_SHOW);
   const rows = shown.map(changeRow).join('');
@@ -365,7 +426,7 @@ function changesSection(raw) {
   const body = rows ? `<table>${rows}</table>${more}` : '<div class="none">No scoring changes yet since the app started. They appear here as points come in.</div>';
   const opts = `<label class="opt"><input type="checkbox" id="optMerge" ${feedOpts.merge ? 'checked' : ''}> merge bursts</label>
     <label class="opt"><input type="checkbox" id="optBig" ${feedOpts.big ? 'checked' : ''}> big plays only (${BIG_PLAY}+)</label>`;
-  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · effect on your margin in each league</span><span class="opts">${opts}</span></div>${body}</div>`;
+  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · grouped by play · effect on your margin in each league</span><span class="opts">${opts}</span></div>${body}</div>`;
 }
 
 function wireFeedControls() {

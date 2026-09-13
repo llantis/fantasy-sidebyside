@@ -17,6 +17,9 @@ What's on the page:
 - **Enemy key players** — started against you in 2+ leagues.
 - **Recent changes** — every scoring change since the app started, newest first, with the effect on
   your margin in each league the player appears in (positive if he is yours, negative if he is against you).
+  Each row shows what he did ("+1 rec, +32 yds, TD") from the live NFL stat feed and his week line;
+  expand a row to see one line per play with a column per league, so the same play reported by
+  Sleeper and ESPN a minute apart, or scored differently by league, lines up side by side.
 
 Everything runs on your own computer. Nothing is uploaded anywhere.
 

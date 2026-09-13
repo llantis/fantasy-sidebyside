@@ -206,3 +206,11 @@ td.flash.down { animation-name: flashdown; }
 .changes .grid td.blank { color: var(--line); }
 .changes .grid td.pts { color: var(--dim); }
 .changes .grid tfoot td { background: var(--card); }
+
+/* stat text on feed rows and the play column in the detail grid */
+.pl .sub.stat .sd { color: var(--text); font-weight: 600; }
+.pl .sub.stat .sl { color: var(--dim); }
+.changes .grid { min-width: 440px; }
+.changes .grid th.ev, .changes .grid td.ev { text-align: left; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.changes .grid td.ev.muted { color: var(--dim); font-style: italic; }
+.changes .grid tfoot td.ev { color: var(--muted); font-weight: 600; }

@@ -5,7 +5,8 @@ import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readConfig, writeConfig, normalizeConfig, redactConfig, isConfigured } from './lib/config.js';
 import { getNflState } from './lib/nfl.js';
-import { getSleeperMatchups, probeSleeper } from './lib/sleeper.js';
+import { getSleeperMatchups, probeSleeper, getLiveStats } from "./lib/sleeper.js";
+import { createStatTracker } from "./lib/stats.js";
 import { getEspnMatchups, probeEspn } from "./lib/espn.js";
 import { round1 } from "./lib/model.js";
 
@@ -34,7 +35,9 @@ let timer = null;
 const MAX_CHANGES = 150;
 const lastPoints = new Map();   // "platform|league|side|playerId" -> points
 let changes = [];
+const statTracker = createStatTracker();   // attaches "+1 rec, +32 yds, TD" to point changes
 
+// Returns the set of player keys that produced a change this poll.
 function detectChanges(matchups, at) {
   const byPlayer = new Map();
   for (const m of matchups) {
@@ -49,8 +52,9 @@ function detectChanges(matchups, at) {
         lastPoints.set(k, p.points);
         if (prev == null || prev === p.points) continue;
         const delta = round1(p.points - prev);
+        if (!delta) continue;   // sub-cent wobble in a platform number, not a scoring change
         if (!byPlayer.has(p.key)) {
-          byPlayer.set(p.key, { at, key: p.key, name: p.name, pos: p.pos, team: p.team, points: p.points, delta, game: p.game, appearances: [] });
+          byPlayer.set(p.key, { at, key: p.key, name: p.name, pos: p.pos, team: p.team, points: p.points, delta, game: p.game, appearances: [], stats: statTracker.take(p.key) });
         }
         byPlayer.get(p.key).appearances.push({
           platform: m.platform, league: m.leagueName, side, teamName: s.teamName, delta,
@@ -61,6 +65,20 @@ function detectChanges(matchups, at) {
   }
   const fresh = [...byPlayer.values()].map((e) => ({ ...e, netImpact: round1(e.appearances.reduce((a, x) => a + x.impact, 0)) }));
   if (fresh.length) changes = [...fresh, ...changes].slice(0, MAX_CHANGES);
+  return new Set(byPlayer.keys());
+}
+
+// Stats that arrive a poll or two after the points did: attach them to that player's most recent
+// stats-less change instead of holding them for his next one.
+const BACKFILL_MS = 3 * 60 * 1000;
+function backfillStats(movedKeys, changedKeys, at) {
+  const now = new Date(at).getTime();
+  for (const k of movedKeys) {
+    if (changedKeys.has(k)) continue;                                   // already attached this poll
+    const c = changes.find((x) => x.key === k);                          // newest first
+    if (!c || c.stats?.delta || now - new Date(c.at).getTime() > BACKFILL_MS) continue;
+    c.stats = statTracker.take(k);
+  }
 }
 
 async function refresh() {
@@ -70,12 +88,17 @@ async function refresh() {
     const errors = [];
     try {
       const nfl = await getNflState();
+      // Live stat feed runs alongside the league fetches; its failure never blocks points.
+      const statsJob = getLiveStats(nfl.season, nfl.week).catch((e) => { console.warn("live stats unavailable:", e.message); return null; });
       const jobs = [];
       if (config.sleeper) jobs.push(getSleeperMatchups(config.sleeper, nfl, CACHE_DIR).catch((e) => { errors.push(`Sleeper: ${e.message}`); return []; }));
       if (config.espn) jobs.push(getEspnMatchups(config.espn, nfl).catch((e) => { errors.push(`ESPN: ${e.message}`); return []; }));
       const matchups = (await Promise.all(jobs)).flat();
+      const feed = await statsJob;
       const updatedAt = new Date().toISOString();
-      detectChanges(matchups, updatedAt);
+      const moved = feed ? statTracker.ingest(feed, `${nfl.season}-${nfl.week}`) : new Set();
+      const changed = detectChanges(matchups, updatedAt);
+      backfillStats(moved, changed, updatedAt);
       snapshot = { updatedAt, season: nfl.season, week: nfl.week, refreshSeconds: config.refreshSeconds, matchups, changes, errors };
     } catch (e) {
       errors.push(`NFL scoreboard: ${e.message}`);
@@ -176,7 +199,11 @@ const server = http.createServer(async (req, res) => {
       if (!isConfigured(config)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
       return serveStatic(res, '/index.html');
     }
-    if (p === '/setup') return serveStatic(res, '/setup.html');
+    if (p === "/setup") return serveStatic(res, "/setup.html");
+    if (p === "/statfmt.js") {   // shared formatter, also used by the page
+      res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-store" });
+      return fs.createReadStream(path.join(ROOT, "lib", "statfmt.js")).pipe(res);
+    }
     return serveStatic(res, p);
   } catch (e) {
     return json(res, 500, { error: e.message });
