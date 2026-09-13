@@ -1,0 +1,12 @@
+{
+  "name": "fantasy-sidebyside",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Local dashboard showing your Sleeper + ESPN fantasy lineups side by side with your opponents, refreshed live.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

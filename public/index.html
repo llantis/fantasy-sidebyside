@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy · Side by Side</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Fantasy · Side by Side</h1>
+  <div class="meta">
+    <span id="week"></span>
+    <span id="updated"></span>
+    <span id="next"></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="legend">
+    <span><i class="dot on"></i>on field</span>
+    <span><i class="dot on rz"></i>red zone</span>
+    <span><i class="dot in"></i>sideline</span>
+    <span><i class="dot pre"></i>not started</span>
+    <span><i class="dot post"></i>final</span>
+  </div>
+  <button id="refreshBtn" title="Force a refresh now">Refresh</button>
+</header>
+
+<div class="errors" id="errors"></div>
+<main id="main"><div class="empty">Loading…</div></main>
+<section id="people"></section>
+
+<script src="app.js"></script>
+</body>
+</html>

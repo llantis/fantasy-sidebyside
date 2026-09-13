@@ -1,0 +1,16 @@
+{
+  "port": 5050,
+  "refreshSeconds": 30,
+
+  "sleeper": {
+    "username": "your_sleeper_username",
+    "leagueIds": []
+  },
+
+  "espn": {
+    "s2": "PASTE_espn_s2_COOKIE",
+    "swid": "{PASTE-SWID-COOKIE-WITH-BRACES}",
+    "leagueIds": [123456789],
+    "teamId": null
+  }
+}
