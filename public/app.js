@@ -68,9 +68,10 @@ function playerKey(p) {
   return `${name}|${p.pos}`;
 }
 
-// Groups every starter across all matchups, then splits into:
+// Groups every starter across all matchups, then splits into three lists:
 //   controversial — on your team in at least one league AND against you in at least one
-//   key           — on your team in 2+ leagues, or against you in 2+ leagues (and not controversial)
+//   mine          — on your team in 2+ leagues (and never against you)
+//   theirs        — against you in 2+ leagues (and never on your team)
 function crossLeaguePlayers(matchups) {
   const groups = new Map();
   for (const m of matchups) {
@@ -89,17 +90,20 @@ function crossLeaguePlayers(matchups) {
   }
 
   const controversial = [];
-  const key = [];
+  const mine = [];
+  const theirs = [];
   for (const g of groups.values()) {
     if (g.mine.length && g.theirs.length) controversial.push(g);
-    else if (g.mine.length >= 2 || g.theirs.length >= 2) key.push(g);
+    else if (g.mine.length >= 2) mine.push(g);
+    else if (g.theirs.length >= 2) theirs.push(g);
   }
   const byWeight = (a, b) =>
     (b.mine.length + b.theirs.length) - (a.mine.length + a.theirs.length) ||
     (b.player.points ?? 0) - (a.player.points ?? 0);
   controversial.sort(byWeight);
-  key.sort(byWeight);
-  return { controversial, key };
+  mine.sort(byWeight);
+  theirs.sort(byWeight);
+  return { mine, controversial, theirs };
 }
 
 // =============================================================================
@@ -285,12 +289,14 @@ function render() {
     ? list.map(card).join('')
     : '<div class="empty">No matchups found. Check config.json.</div>';
 
-  const { controversial, key } = crossLeaguePlayers(list);
+  const { mine, controversial, theirs } = crossLeaguePlayers(list);
   document.getElementById('people').innerHTML =
-    section('Key people', 'on your team, or against you, in 2+ leagues', key,
-      'No player shows up on your side or against you in more than one league this week.') +
-    section('Controversial people', 'on your team in one league, against you in another', controversial,
-      'Nobody is both for you and against you this week.');
+    section('My key players', 'on your team in 2+ leagues', mine,
+      'No player is on your team in more than one league this week.') +
+    section('Controversial', 'on your team in one league, against you in another', controversial,
+      'Nobody is both for you and against you this week.') +
+    section('Enemy key players', 'against you in 2+ leagues', theirs,
+      'No opponent starts the same player against you in more than one league this week.');
 }
 
 document.getElementById('refreshBtn').addEventListener('click', () => load(true));

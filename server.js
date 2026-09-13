@@ -162,7 +162,14 @@ if (process.env.FSBS_PARENT_WATCH) {
 
 await refresh();
 schedule();
-server.listen(PORT, '127.0.0.1', () => {
+server.on("error", (e) => {
+  if (e.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. Is Fantasy Side by Side already running? Try http://localhost:${PORT}`);
+    process.exit(1);
+  }
+  throw e;
+});
+server.listen(PORT, "127.0.0.1", () => {
   const base = `http://localhost:${PORT}`;
   console.log(`fantasy-sidebyside → ${base}  (refresh every ${config.refreshSeconds}s)`);
   if (!isConfigured(config)) console.log('No config yet — opening the setup page.');

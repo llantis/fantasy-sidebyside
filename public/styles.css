@@ -41,7 +41,8 @@ header a.settings:hover { color: var(--text); }
 .errors:empty { display: none; }
 
 /* ---------- layout ---------- */
-main, #people { display: grid; grid-template-columns: repeat(auto-fit, minmax(640px, 1fr)); gap: 14px; }
+main { display: grid; grid-template-columns: repeat(auto-fit, minmax(640px, 1fr)); gap: 14px; }
+#people { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; }
 main { padding: 14px 18px 10px; }
 #people { padding: 4px 18px 40px; }
 @media (max-width: 680px) {
@@ -154,10 +155,12 @@ td.flash.down { animation-name: flashdown; }
 
 /* ---------- key / controversial people ---------- */
 .sec .none { padding: 14px; color: var(--dim); font-size: 12.5px; }
-.sec td.who { width: 44%; }
+.sec table { table-layout: fixed; }              /* lets long chips truncate instead of overflowing the card */
+.sec td.who { width: 52%; }
 .sec td.lg { padding: 6px 10px; }
 .chip {
-  display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; margin: 2px 4px 2px 0;
+  display: inline-block; max-width: 100%; vertical-align: top; overflow: hidden; text-overflow: ellipsis;
+  font-size: 11px; padding: 2px 7px; border-radius: 999px; margin: 2px 4px 2px 0;
   border: 1px solid var(--line); background: var(--card2); color: var(--muted); white-space: nowrap;
 }
 .chip.me { border-color: rgba(124,196,255,.45); color: var(--me); }

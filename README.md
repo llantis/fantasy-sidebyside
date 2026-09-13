@@ -12,8 +12,9 @@ What's on the page:
   dim green on the sideline, hollow ring before kickoff, gray when final.
 - The game clock coloured by urgency: green in Q1–Q2, yellow at halftime/Q3, orange in Q4,
   red inside two minutes.
-- **Key people** — players on your team, or against you, in 2+ leagues.
-- **Controversial people** — players on your team in one league and against you in another.
+- **My key players** — on your team in 2+ leagues.
+- **Controversial** — on your team in one league and against you in another.
+- **Enemy key players** — started against you in 2+ leagues.
 
 Everything runs on your own computer. Nothing is uploaded anywhere.
 
