@@ -272,7 +272,7 @@ const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', mi
 // Feed options, remembered per browser. "merge" folds a player's rapid-fire changes into one row;
 // "big" hides bursts under BIG_PLAY points. Untick both for the raw server feed.
 const BURST_WINDOW_MS = 5 * 60 * 1000;
-const BIG_PLAY = 6;
+const BIG_PLAY = 2.5;
 const FEED_SHOW = 25;
 const feedOpts = { merge: true, big: false };
 try { Object.assign(feedOpts, JSON.parse(localStorage.getItem('feedOpts') || '{}')); } catch {}
