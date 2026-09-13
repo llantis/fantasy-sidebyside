@@ -243,10 +243,9 @@ function card(m) {
 
 function personRow(g) {
   const p = g.player;
-  const chips = [
-    ...g.mine.map((a) => `<span class="chip me"><b>you</b> · ${esc(a.league)}</span>`),
-    ...g.theirs.map((a) => `<span class="chip opp"><b>vs</b> · ${esc(a.league)} (${esc(a.teamName)})</span>`),
-  ].join('');
+  // Colour carries the side (blue = your team, orange = opponent); the chip names the fantasy team and league.
+  const chip = (a, side) => `<span class="chip ${side}"><b>${esc(a.teamName)}</b> · ${esc(a.league)}</span>`;
+  const chips = [...g.mine.map((a) => chip(a, 'me')), ...g.theirs.map((a) => chip(a, 'opp'))].join('');
   const cnt = [
     g.mine.length ? `for you ×${g.mine.length}` : '',
     g.theirs.length ? `against you ×${g.theirs.length}` : '',
@@ -273,8 +272,7 @@ const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', mi
 function changeRow(e) {
   const chips = e.appearances.map((a) => {
     const good = a.impact > 0, bad = a.impact < 0;
-    const who = a.side === 'me' ? 'you' : `vs ${esc(a.teamName)}`;
-    return `<span class="chip ${a.side}"><b class="num ${good ? 'up' : bad ? 'down' : ''}">${signed(a.impact)}</b> · ${who} · ${esc(a.league)}</span>`;
+    return `<span class="chip ${a.side}"><b class="num ${good ? 'up' : bad ? 'down' : ''}">${signed(a.impact)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`;
   }).join('');
   const net = e.appearances.length > 1
     ? `<div class="net num ${e.netImpact > 0 ? 'up' : e.netImpact < 0 ? 'down' : ''}">net ${signed(e.netImpact)}</div>` : '';
