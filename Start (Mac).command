@@ -2,6 +2,7 @@
 # Double-click me. Installs Node.js if needed, starts the app, opens your browser.
 cd "$(dirname "$0")"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+xattr -dr com.apple.quarantine . 2>/dev/null || true
 
 if ! command -v node >/dev/null 2>&1; then
   if command -v brew >/dev/null 2>&1; then

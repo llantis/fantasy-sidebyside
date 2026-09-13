@@ -22,18 +22,31 @@ Everything runs on your own computer. Nothing is uploaded anywhere.
 ## Setup (a few clicks)
 
 1. **Get the folder.** Download the ZIP (green **Code** button → Download ZIP) and unzip it, or `git clone` it.
-2. **Double-click the launcher** in the folder:
-   - macOS: **`Start (Mac).command`** — if macOS says it can't be opened, right-click → Open the first time.
-   - Windows: **`Start (Windows).bat`**
-   
-   It installs Node.js if you don't have it (Homebrew on Mac, winget on Windows), starts the app,
-   and opens your browser.
+2. **Start it.**
+
+   **macOS — easiest:** open **Terminal** (Cmd+Space, type Terminal) and paste this one line:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/llantis/fantasy-sidebyside/main/install.sh | bash
+   ```
+
+   It installs Node.js if you don't have it, downloads the app to `~/fantasy-sidebyside`, starts it,
+   and opens your browser. Re-run the same line any time to start it again (it also picks up updates).
+   You can skip step 1 entirely this way.
+
+   **macOS — double-click:** `Start (Mac).command`. Because the folder came from a download, macOS will
+   say *"Apple could not verify … is free of malware"*. That's Gatekeeper, not a problem with the file.
+   Click **Done**, open **System Settings → Privacy & Security**, scroll down to the message about
+   `Start (Mac).command`, click **Open Anyway**, then double-click the launcher again. Once only.
+
+   **Windows:** double-click `Start (Windows).bat`. It installs Node.js with winget if needed.
+
 3. **Fill in the setup page** that opens. Sleeper only needs your username. ESPN needs your league
    ID and two cookies; the page walks you through copying them. Press **Check & save** — it
    verifies everything against Sleeper/ESPN before saving, then opens your dashboard.
 
-Leave the terminal window open while you watch. Close it to stop. Next time, just double-click
-the launcher again. The **⚙ settings** link in the header reopens the setup page.
+Leave the terminal window open while you watch. Close it to stop. Next time, re-run the one-liner
+or double-click the launcher again. The **⚙ settings** link in the header reopens the setup page.
 
 Prefer the terminal? `npm start` does the same thing (Node 20+ required, no `npm install` needed).
 Config lives in `config.json`; `config.example.json` shows the shape.
@@ -65,6 +78,7 @@ public/setup.html    first-run setup page (/setup); posts to /api/setup, which v
 public/setup.js
 public/styles.css
 public/index.html
+install.sh           curl-pipe-bash installer for macOS/Linux: Node if missing, clone or update, run
 Start (Mac).command  double-click launchers: install Node if missing, run server, open browser
 Start (Windows).bat
 ```
