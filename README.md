@@ -53,6 +53,41 @@ Config lives in `config.json`; `config.example.json` shows the shape.
 
 ---
 
+## Mac app (the real "drag to Applications" experience)
+
+`mac/build-app.sh` builds **Fantasy Side by Side.app**: a menu bar app (🏈) with *Open Dashboard*,
+*Settings…* and *Quit*, with Node bundled inside so nothing else needs installing. It ships as a DMG
+with an Applications shortcut. Config and cache live in `~/Library/Application Support/Fantasy Side by Side/`.
+
+```sh
+./mac/build-app.sh          # → dist/Fantasy Side by Side.app + dist/Fantasy-Side-by-Side-<version>.dmg
+```
+
+**The catch: Gatekeeper.** An app that friends download only opens without the *"Apple could not
+verify…"* dialog if it is signed with a **Developer ID** certificate and **notarized** by Apple.
+That requires the paid Apple Developer Program (US$99/year). There is no packaging trick around it;
+an unsigned `.app` gets exactly the same dialog as the `.command` file.
+
+Once enrolled, it's a one-time setup and then one command:
+
+1. Xcode → Settings → Accounts → your Apple ID → **Manage Certificates** → **+** → *Developer ID Application*.
+2. Create an app-specific password at <https://appleid.apple.com>, then store it once:
+   ```sh
+   xcrun notarytool store-credentials fsbs --apple-id you@example.com --team-id YOURTEAMID
+   ```
+3. Build, sign, notarize and staple in one go:
+   ```sh
+   SIGN_IDENTITY="Developer ID Application: Your Name (YOURTEAMID)" NOTARY_PROFILE=fsbs ./mac/build-app.sh
+   ```
+
+The resulting DMG opens cleanly on any Mac: double-click, drag to Applications, done. Without
+`SIGN_IDENTITY` the script still produces a working app for your own machine.
+
+The build stages in a temp folder on purpose: bundles assembled inside iCloud Drive / Dropbox folders
+pick up extended attributes that `codesign` rejects.
+
+---
+
 ## Options
 
 In `config.json`:
@@ -79,6 +114,7 @@ public/setup.js
 public/styles.css
 public/index.html
 install.sh           curl-pipe-bash installer for macOS/Linux: Node if missing, clone or update, run
+mac/                 Mac app: Swift menu-bar launcher, build-app.sh (bundle Node, sign, notarize, DMG)
 Start (Mac).command  double-click launchers: install Node if missing, run server, open browser
 Start (Windows).bat
 ```

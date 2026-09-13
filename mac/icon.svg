@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c222c"/><stop offset="1" stop-color="#0e1116"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="none" stroke="#262d38" stroke-width="12"/>
+  <!-- left (you) bars -->
+  <rect x="196" y="300" width="230" height="64" rx="20" fill="#7cc4ff"/>
+  <rect x="196" y="420" width="230" height="64" rx="20" fill="#7cc4ff" opacity=".75"/>
+  <rect x="196" y="540" width="230" height="64" rx="20" fill="#7cc4ff" opacity=".5"/>
+  <rect x="196" y="660" width="230" height="64" rx="20" fill="#7cc4ff" opacity=".3"/>
+  <!-- right (opponent) bars -->
+  <rect x="598" y="300" width="230" height="64" rx="20" fill="#ffb86b"/>
+  <rect x="598" y="420" width="230" height="64" rx="20" fill="#ffb86b" opacity=".75"/>
+  <rect x="598" y="540" width="230" height="64" rx="20" fill="#ffb86b" opacity=".5"/>
+  <rect x="598" y="660" width="230" height="64" rx="20" fill="#ffb86b" opacity=".3"/>
+  <!-- live dot in the middle -->
+  <circle cx="512" cy="512" r="46" fill="#3ddc84"/>
+  <circle cx="512" cy="512" r="78" fill="none" stroke="#3ddc84" stroke-width="10" opacity=".35"/>
+</svg>

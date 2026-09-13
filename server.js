@@ -9,10 +9,14 @@ import { getSleeperMatchups, probeSleeper } from './lib/sleeper.js';
 import { getEspnMatchups, probeEspn } from './lib/espn.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC = path.join(ROOT, 'public');
-const CACHE_DIR = path.join(ROOT, '.cache');
+const PUBLIC = path.join(ROOT, "public");
+// Where config.json and the cache live. The packaged Mac app points this at
+// ~/Library/Application Support so the signed bundle is never written to.
+const DATA_DIR = process.env.FSBS_DATA_DIR || ROOT;
+const CACHE_DIR = path.join(DATA_DIR, ".cache");
+fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-let config = readConfig(ROOT);
+let config = readConfig(DATA_DIR);
 const PORT = Number(process.env.PORT) || config.port;
 
 // ---------------------------------------------------------------------------
@@ -82,7 +86,7 @@ async function applySetup(body) {
   const ok = Object.values(results).every((r) => r.ok);
   if (!ok) return { ok, results };
 
-  writeConfig(ROOT, next);
+  writeConfig(DATA_DIR, next);
   config = next;
   schedule();
   await refresh();
@@ -148,6 +152,12 @@ function openBrowser(target) {
     : process.platform === 'win32' ? `start "" "${target}"`
     : `xdg-open "${target}"`;
   exec(cmd, () => {});
+}
+
+// Packaged app: if the launcher dies without a clean quit, don't linger holding the port.
+if (process.env.FSBS_PARENT_WATCH) {
+  const parent = process.ppid;
+  setInterval(() => { try { process.kill(parent, 0); } catch { process.exit(0); } }, 2000).unref();
 }
 
 await refresh();
