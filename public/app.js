@@ -269,26 +269,85 @@ function section(title, hint, list, emptyText) {
 const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
 const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+// Feed options, remembered per browser. "merge" folds a player's rapid-fire changes into one row;
+// "big" hides bursts under BIG_PLAY points. Untick both for the raw server feed.
+const BURST_WINDOW_MS = 5 * 60 * 1000;
+const BIG_PLAY = 6;
+const FEED_SHOW = 25;
+const feedOpts = { merge: true, big: false };
+try { Object.assign(feedOpts, JSON.parse(localStorage.getItem('feedOpts') || '{}')); } catch {}
+let feedShowAll = false;
+
+// Fold consecutive changes for the same player into one "burst" while they arrive within
+// BURST_WINDOW_MS of the previous one. Also absorbs the same play reported by Sleeper and ESPN a
+// minute apart. Per-league impact is summed; the headline delta is the largest per-league movement.
+function mergeBursts(changes) {
+  const open = new Map();   // player key -> burst still accepting changes
+  const bursts = [];
+  for (const e of [...changes].reverse()) {           // oldest first
+    const t = new Date(e.at).getTime();
+    let b = open.get(e.key);
+    if (!b || t - b.lastAt >= BURST_WINDOW_MS) {
+      b = { key: e.key, name: e.name, pos: e.pos, team: e.team, firstAt: t, lastAt: t, count: 0, points: e.points, game: e.game, leagues: new Map() };
+      open.set(e.key, b);
+      bursts.push(b);
+    }
+    b.lastAt = t; b.count++; b.points = e.points; b.game = e.game;
+    for (const a of e.appearances) {
+      const k = `${a.platform}|${a.league}|${a.side}`;
+      const l = b.leagues.get(k) ?? { ...a, delta: 0, impact: 0 };
+      l.delta = Math.round((l.delta + a.delta) * 100) / 100;
+      l.impact = Math.round((l.impact + a.impact) * 100) / 100;
+      b.leagues.set(k, l);
+    }
+  }
+  return bursts.map((b) => {
+    const appearances = [...b.leagues.values()];
+    const delta = appearances.reduce((m, a) => Math.abs(a.delta) > Math.abs(m) ? a.delta : m, 0);
+    const netImpact = Math.round(appearances.reduce((s, a) => s + a.impact, 0) * 100) / 100;
+    return { ...b, appearances, delta, netImpact };
+  }).sort((a, b) => b.lastAt - a.lastAt);
+}
+
 function changeRow(e) {
-  const chips = e.appearances.map((a) => {
-    const good = a.impact > 0, bad = a.impact < 0;
-    return `<span class="chip ${a.side}"><b class="num ${good ? 'up' : bad ? 'down' : ''}">${signed(a.impact)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`;
-  }).join('');
+  const chips = e.appearances.map((a) =>
+    `<span class="chip ${a.side}"><b class="num ${a.impact > 0 ? 'up' : a.impact < 0 ? 'down' : ''}">${signed(a.impact)}</b> · ${esc(a.teamName)} · ${esc(a.league)}</span>`
+  ).join('');
   const net = e.appearances.length > 1
     ? `<div class="net num ${e.netImpact > 0 ? 'up' : e.netImpact < 0 ? 'down' : ''}">net ${signed(e.netImpact)}</div>` : '';
+  const when = e.count > 1 && hhmm(new Date(e.firstAt).toISOString()) !== hhmm(new Date(e.lastAt).toISOString())
+    ? `${hhmm(new Date(e.firstAt).toISOString())}<br>–${hhmm(new Date(e.lastAt).toISOString())}`
+    : hhmm(new Date(e.lastAt).toISOString());
+  const count = e.count > 1 ? `<span class="cnt">${e.count} updates</span>` : '';
   const rz = dotClass(e) === 'on rz' ? ' rz' : '';
-  return `<tr>
-    <td class="when num">${hhmm(e.at)}</td>
+  const big = Math.abs(e.delta) >= BIG_PLAY ? ' big' : '';
+  return `<tr class="${big.trim()}">
+    <td class="when num">${when}</td>
     <td class="delta-cell num ${e.delta > 0 ? 'up' : 'down'}">${signed(e.delta)}</td>
-    <td class="who${rz}">${playerBlock(e)}</td>
+    <td class="who${rz}">${playerBlock(e, '', count)}</td>
     <td class="lg">${chips}${net}</td>
   </tr>`;
 }
 
-function changesSection(list) {
-  const rows = list.slice(0, 40).map(changeRow).join('');
-  const body = rows ? `<table>${rows}</table>` : '<div class="none">No scoring changes yet since the app started. They appear here as points come in.</div>';
-  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · effect on your margin in each league</span></div>${body}</div>`;
+function changesSection(raw) {
+  let list = feedOpts.merge ? mergeBursts(raw) : raw.map((e) => ({ ...e, firstAt: new Date(e.at).getTime(), lastAt: new Date(e.at).getTime(), count: 1 }));
+  if (feedOpts.big) list = list.filter((e) => Math.abs(e.delta) >= BIG_PLAY);
+  const shown = feedShowAll ? list : list.slice(0, FEED_SHOW);
+  const rows = shown.map(changeRow).join('');
+  const more = list.length > shown.length
+    ? `<div class="more"><a href="#" id="feedMore">show ${list.length - shown.length} more</a></div>`
+    : (feedShowAll && list.length > FEED_SHOW ? `<div class="more"><a href="#" id="feedMore">show fewer</a></div>` : '');
+  const body = rows ? `<table>${rows}</table>${more}` : '<div class="none">No scoring changes yet since the app started. They appear here as points come in.</div>';
+  const opts = `<label class="opt"><input type="checkbox" id="optMerge" ${feedOpts.merge ? 'checked' : ''}> merge bursts</label>
+    <label class="opt"><input type="checkbox" id="optBig" ${feedOpts.big ? 'checked' : ''}> big plays only (${BIG_PLAY}+)</label>`;
+  return `<div class="card sec changes"><div class="title"><span class="name">Recent changes</span><span class="hint">newest first · effect on your margin in each league</span><span class="opts">${opts}</span></div>${body}</div>`;
+}
+
+function wireFeedControls() {
+  const save = () => { try { localStorage.setItem('feedOpts', JSON.stringify(feedOpts)); } catch {} };
+  document.getElementById('optMerge')?.addEventListener('change', (ev) => { feedOpts.merge = ev.target.checked; save(); render(); });
+  document.getElementById('optBig')?.addEventListener('change', (ev) => { feedOpts.big = ev.target.checked; save(); render(); });
+  document.getElementById('feedMore')?.addEventListener('click', (ev) => { ev.preventDefault(); feedShowAll = !feedShowAll; render(); });
 }
 
 // =============================================================================
@@ -314,6 +373,7 @@ function render() {
     section('Enemy key players', 'against you in 2+ leagues', theirs,
       'No opponent starts the same player against you in more than one league this week.');
   document.getElementById('changes').innerHTML = changesSection(snap.changes || []);
+  wireFeedControls();
 }
 
 document.getElementById('refreshBtn').addEventListener('click', () => load(true));
