@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup · Fantasy Side by Side</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 18px 60px; }
+  .wrap h2 { font-size: 15px; margin: 0; }
+  .intro { color: var(--muted); font-size: 13px; margin: 6px 0 18px; }
+  .card { margin-bottom: 14px; }
+  .card .body { padding: 14px; }
+  .card .title .toggle { margin-left: auto; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  label:first-child { margin-top: 0; }
+  input[type=text], input[type=number], textarea {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 13.5px;
+  }
+  textarea { font-family: var(--mono); font-size: 12px; min-height: 64px; resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: var(--muted); }
+  .hint { color: var(--dim); font-size: 11.5px; margin-top: 4px; }
+  .hint code { color: var(--muted); }
+  ol.steps { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; padding-left: 18px; }
+  ol.steps li { margin: 3px 0; }
+  ol.steps kbd { background: var(--card2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  button.primary {
+    background: var(--me); color: #0b1b2b; border: 0; border-radius: 6px; padding: 9px 16px;
+    font: inherit; font-weight: 700; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  a.quiet { color: var(--muted); font-size: 12.5px; }
+  .result { margin-top: 12px; font-size: 13px; }
+  .result .ok { color: var(--win); }
+  .result .bad { color: var(--lose); }
+  .result ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .switch input { accent-color: var(--me); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fantasy · Side by Side</h1>
+  <div class="meta"><span>Setup</span></div>
+  <div class="spacer"></div>
+  <a class="quiet" id="backLink" href="/">← back to dashboard</a>
+</header>
+
+<div class="wrap">
+  <h2>Connect your leagues</h2>
+  <p class="intro">Everything you enter here is saved to <code>config.json</code> on this computer and only ever sent to Sleeper and ESPN. Fill in whichever platforms you use.</p>
+
+  <form id="form">
+    <div class="card">
+      <div class="title"><span class="badge sleeper">sleeper</span><span class="name">Sleeper</span>
+        <label class="switch toggle"><input type="checkbox" id="useSleeper"> use Sleeper</label></div>
+      <div class="body" id="sleeperBody">
+        <label for="sleeperUser">Sleeper username</label>
+        <input type="text" id="sleeperUser" autocomplete="off" spellcheck="false" placeholder="e.g. llantis">
+        <div class="hint">That's all Sleeper needs. All your leagues for this season are shown automatically.</div>
+        <label for="sleeperLeagues">Only these league IDs <span style="color:var(--dim)">(optional)</span></label>
+        <input type="text" id="sleeperLeagues" autocomplete="off" spellcheck="false" placeholder="leave blank for all leagues">
+        <div class="hint">From the URL: <code>sleeper.com/leagues/&lt;id&gt;</code>. Comma-separated.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title"><span class="badge espn">espn</span><span class="name">ESPN</span>
+        <label class="switch toggle"><input type="checkbox" id="useEspn"> use ESPN</label></div>
+      <div class="body" id="espnBody">
+        <label for="espnLeagues">League ID(s)</label>
+        <input type="text" id="espnLeagues" autocomplete="off" spellcheck="false" placeholder="e.g. 1765914, 2231100">
+        <div class="hint">From your league URL: <code>fantasy.espn.com/football/league?leagueId=<b>1765914</b></code>. Comma-separated.</div>
+
+        <label>Cookies</label>
+        <div class="hint">ESPN has no public API, so the app reads your league the same way your browser does. Two cookies from a browser where you're logged into ESPN Fantasy:</div>
+        <ol class="steps">
+          <li>Open <a href="https://fantasy.espn.com" target="_blank" rel="noopener" style="color:var(--me)">fantasy.espn.com</a> and log in.</li>
+          <li>Open DevTools: <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>I</kbd> on Mac, <kbd>F12</kbd> on Windows.</li>
+          <li>Go to the <b>Application</b> tab (Firefox: <b>Storage</b>) → <b>Cookies</b> → <code>https://fantasy.espn.com</code>.</li>
+          <li>Copy the <b>Value</b> of <code>espn_s2</code> and of <code>SWID</code> into the boxes below.</li>
+        </ol>
+        <label for="espnS2">espn_s2</label>
+        <textarea id="espnS2" autocomplete="off" spellcheck="false" placeholder="AEB…  (very long)"></textarea>
+        <div class="row">
+          <div>
+            <label for="espnSwid">SWID</label>
+            <input type="text" id="espnSwid" autocomplete="off" spellcheck="false" placeholder="{1234ABCD-…}">
+            <div class="hint">Keep the curly braces.</div>
+          </div>
+          <div>
+            <label for="espnTeam">Team ID <span style="color:var(--dim)">(optional)</span></label>
+            <input type="number" id="espnTeam" placeholder="auto-detected">
+            <div class="hint">Only if your team isn't found. From your team URL: <code>…&amp;teamId=<b>8</b></code>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title"><span class="name">Refresh</span></div>
+      <div class="body">
+        <label for="refresh">Re-fetch scores every</label>
+        <div class="row" style="align-items:center; max-width: 220px">
+          <input type="number" id="refresh" min="10" max="600" value="30"> <span style="color:var(--muted)">seconds</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="save" type="submit">Check &amp; save</button>
+      <span id="status" style="color:var(--muted); font-size:12.5px"></span>
+    </div>
+    <div class="result" id="result"></div>
+  </form>
+</div>
+
+<script src="setup.js"></script>
+</body>
+</html>

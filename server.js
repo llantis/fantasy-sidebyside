@@ -1,23 +1,33 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from './lib/config.js';
+import { readConfig, writeConfig, normalizeConfig, redactConfig, isConfigured } from './lib/config.js';
 import { getNflState } from './lib/nfl.js';
-import { getSleeperMatchups } from './lib/sleeper.js';
-import { getEspnMatchups } from './lib/espn.js';
+import { getSleeperMatchups, probeSleeper } from './lib/sleeper.js';
+import { getEspnMatchups, probeEspn } from './lib/espn.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const config = loadConfig(ROOT);
+const PUBLIC = path.join(ROOT, 'public');
 const CACHE_DIR = path.join(ROOT, '.cache');
-const REFRESH_MS = config.refreshSeconds * 1000;
 
-let snapshot = { updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], errors: ['starting up…'] };
+let config = readConfig(ROOT);
+const PORT = Number(process.env.PORT) || config.port;
+
+// ---------------------------------------------------------------------------
+// Polling
+// ---------------------------------------------------------------------------
+
+const emptySnapshot = () => ({ updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], errors: [] });
+let snapshot = emptySnapshot();
 let inFlight = null;
+let timer = null;
 
 async function refresh() {
   if (inFlight) return inFlight;
   inFlight = (async () => {
+    if (!isConfigured(config)) { snapshot = emptySnapshot(); return; }
     const errors = [];
     try {
       const nfl = await getNflState();
@@ -30,32 +40,121 @@ async function refresh() {
       errors.push(`NFL scoreboard: ${e.message}`);
       snapshot = { ...snapshot, errors };
     }
-    if (errors.length) console.warn(`[${new Date().toLocaleTimeString()}]`, errors.join(' | '));
-    else console.log(`[${new Date().toLocaleTimeString()}] refreshed ${snapshot.matchups.length} matchup(s)`);
+    const stamp = `[${new Date().toLocaleTimeString()}]`;
+    if (errors.length) console.warn(stamp, errors.join(' | '));
+    else console.log(stamp, `refreshed ${snapshot.matchups.length} matchup(s)`);
   })().finally(() => { inFlight = null; });
   return inFlight;
 }
 
+function schedule() {
+  if (timer) clearInterval(timer);
+  timer = setInterval(refresh, config.refreshSeconds * 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Setup: validate what the form sent against the real APIs, then save.
+// ---------------------------------------------------------------------------
+
+async function applySetup(body) {
+  // Blank cookie fields mean "keep the ones already saved".
+  const espnIn = body.espn ?? {};
+  const merged = {
+    ...body,
+    espn: {
+      ...espnIn,
+      s2: espnIn.s2?.trim() || config.espn?.s2 || '',
+      swid: espnIn.swid?.trim() || config.espn?.swid || '',
+    },
+  };
+  const next = normalizeConfig({ port: config.port, ...merged });
+  const results = {};
+
+  if (!isConfigured(next)) return { ok: false, results, error: 'Enter a Sleeper username, or ESPN league IDs plus cookies.' };
+
+  if (next.sleeper) {
+    results.sleeper = await probeSleeper(next.sleeper.username).catch((e) => ({ ok: false, error: e.message }));
+  }
+  if (next.espn) {
+    const { season } = await getNflState();
+    results.espn = await probeEspn(next.espn, season).catch((e) => ({ ok: false, error: e.message }));
+  }
+  const ok = Object.values(results).every((r) => r.ok);
+  if (!ok) return { ok, results };
+
+  writeConfig(ROOT, next);
+  config = next;
+  schedule();
+  await refresh();
+  return { ok, results };
+}
+
+// ---------------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------------
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-  if (url.pathname === '/api/matchups') {
-    if (url.searchParams.has('force')) await refresh();
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify(snapshot));
-  }
-  const rel = url.pathname === '/' ? '/index.html' : url.pathname;
-  const file = path.join(ROOT, 'public', path.normalize(rel));
-  if (!file.startsWith(path.join(ROOT, 'public')) || !fs.existsSync(file)) {
+const json = (res, status, data) => {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(data));
+};
+
+function readBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (c) => { data += c; if (data.length > limit) { reject(new Error('body too large')); req.destroy(); } });
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('invalid JSON')); } });
+    req.on('error', reject);
+  });
+}
+
+function serveStatic(res, rel) {
+  const file = path.join(PUBLIC, path.normalize(rel));
+  if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); return res.end('not found');
   }
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
   fs.createReadStream(file).pipe(res);
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  const p = url.pathname;
+  try {
+    if (p === '/api/matchups') {
+      if (url.searchParams.has('force')) await refresh();
+      return json(res, 200, snapshot);
+    }
+    if (p === '/api/config') return json(res, 200, redactConfig(config));
+    if (p === '/api/setup' && req.method === 'POST') {
+      const result = await applySetup(await readBody(req));
+      return json(res, result.ok ? 200 : 400, result);
+    }
+    if (p === '/') {
+      if (!isConfigured(config)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
+      return serveStatic(res, '/index.html');
+    }
+    if (p === '/setup') return serveStatic(res, '/setup.html');
+    return serveStatic(res, p);
+  } catch (e) {
+    return json(res, 500, { error: e.message });
+  }
 });
 
+function openBrowser(target) {
+  if (process.env.NO_OPEN) return;
+  const cmd = process.platform === 'darwin' ? `open "${target}"`
+    : process.platform === 'win32' ? `start "" "${target}"`
+    : `xdg-open "${target}"`;
+  exec(cmd, () => {});
+}
+
 await refresh();
-setInterval(refresh, REFRESH_MS);
-server.listen(config.port, '127.0.0.1', () => {
-  console.log(`fantasy-sidebyside → http://localhost:${config.port}  (refresh every ${config.refreshSeconds}s)`);
+schedule();
+server.listen(PORT, '127.0.0.1', () => {
+  const base = `http://localhost:${PORT}`;
+  console.log(`fantasy-sidebyside → ${base}  (refresh every ${config.refreshSeconds}s)`);
+  if (!isConfigured(config)) console.log('No config yet — opening the setup page.');
+  openBrowser(isConfigured(config) ? base : `${base}/setup`);
 });

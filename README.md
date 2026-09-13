@@ -19,83 +19,24 @@ Everything runs on your own computer. Nothing is uploaded anywhere.
 
 ---
 
-## Setup (about 5 minutes)
+## Setup (a few clicks)
 
-### 1. Install Node.js
+1. **Get the folder.** Download the ZIP (green **Code** button → Download ZIP) and unzip it, or `git clone` it.
+2. **Double-click the launcher** in the folder:
+   - macOS: **`Start (Mac).command`** — if macOS says it can't be opened, right-click → Open the first time.
+   - Windows: **`Start (Windows).bat`**
+   
+   It installs Node.js if you don't have it (Homebrew on Mac, winget on Windows), starts the app,
+   and opens your browser.
+3. **Fill in the setup page** that opens. Sleeper only needs your username. ESPN needs your league
+   ID and two cookies; the page walks you through copying them. Press **Check & save** — it
+   verifies everything against Sleeper/ESPN before saving, then opens your dashboard.
 
-You need Node.js 20 or newer. Download the "LTS" installer from <https://nodejs.org> and run it.
-To check it worked, open a terminal (macOS: **Terminal** app; Windows: **PowerShell**) and run:
+Leave the terminal window open while you watch. Close it to stop. Next time, just double-click
+the launcher again. The **⚙ settings** link in the header reopens the setup page.
 
-```sh
-node --version
-```
-
-You should see something like `v22.x.x`.
-
-### 2. Get the app
-
-Either download this folder as a ZIP and unzip it, or clone it with git. Then open a terminal
-**in that folder**.
-
-### 3. Create your config
-
-Copy the example config:
-
-```sh
-cp config.example.json config.json        # macOS / Linux
-copy config.example.json config.json      # Windows
-```
-
-Open `config.json` in any text editor and fill in the platforms you use. Delete the section for
-any platform you don't use.
-
-#### Sleeper
-
-```json
-"sleeper": {
-  "username": "your_sleeper_username",
-  "leagueIds": []
-}
-```
-
-That's it. Sleeper's API is public and read-only. Leave `leagueIds` empty to show every league
-you're in this season, or list specific league IDs (from the URL: `sleeper.com/leagues/<id>`).
-
-#### ESPN
-
-ESPN needs two cookies from a browser where you're logged into ESPN Fantasy. They only ever
-go into this file on your computer.
-
-1. Open <https://fantasy.espn.com> and log in.
-2. Open DevTools (**Cmd+Option+I** on Mac, **F12** on Windows) → **Application** tab
-   (Firefox: **Storage**) → **Cookies** → `https://fantasy.espn.com`.
-3. Copy the value of `espn_s2` into `"s2"` and the value of `SWID` (keep the curly braces)
-   into `"swid"`.
-4. Add your league ID(s). It's in the league URL: `fantasy.espn.com/football/league?leagueId=123456789`.
-
-```json
-"espn": {
-  "s2": "AEB...very long...",
-  "swid": "{1234ABCD-....}",
-  "leagueIds": [123456789],
-  "teamId": null
-}
-```
-
-Your team is found automatically from the SWID. Only set `teamId` if the page says it can't
-find your team (the number is in your team URL: `...&teamId=8`).
-
-`espn_s2` expires every so often. If the ESPN card starts showing a 401/403 error, copy a
-fresh one.
-
-### 4. Run it
-
-```sh
-npm start
-```
-
-Open <http://localhost:5050>. Leave the terminal window open while you watch; press **Ctrl+C**
-to stop.
+Prefer the terminal? `npm start` does the same thing (Node 20+ required, no `npm install` needed).
+Config lives in `config.json`; `config.example.json` shows the shape.
 
 ---
 
@@ -120,8 +61,12 @@ lib/espn.js          ESPN adapter     → normalized matchup
 lib/model.js         shared shape, "on pace" maths, win probability estimate
 lib/config.js        loads and validates config.json
 public/app.js        renders the snapshot; cross-league player matching; dot/clock rules
+public/setup.html    first-run setup page (/setup); posts to /api/setup, which validates then saves
+public/setup.js
 public/styles.css
 public/index.html
+Start (Mac).command  double-click launchers: install Node if missing, run server, open browser
+Start (Windows).bat
 ```
 
 - Both adapters produce the same shape, so the page never knows which platform a card came from.
