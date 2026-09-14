@@ -7,6 +7,7 @@ import { readConfig, writeConfig, normalizeConfig, redactConfig, isConfigured } 
 import { getNflState } from './lib/nfl.js';
 import { getSleeperMatchups, probeSleeper, getLiveStats } from "./lib/sleeper.js";
 import { createStatTracker } from "./lib/stats.js";
+import { createHistory } from "./lib/history.js";
 import { getEspnMatchups, probeEspn } from "./lib/espn.js";
 import { round1 } from "./lib/model.js";
 
@@ -25,7 +26,7 @@ const PORT = Number(process.env.PORT) || config.port;
 // Polling
 // ---------------------------------------------------------------------------
 
-const emptySnapshot = () => ({ updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], changes: [], errors: [] });
+const emptySnapshot = () => ({ updatedAt: null, season: null, week: null, refreshSeconds: config.refreshSeconds, matchups: [], changes: [], history: {}, errors: [] });
 let snapshot = emptySnapshot();
 let inFlight = null;
 let timer = null;
@@ -36,6 +37,7 @@ const MAX_CHANGES = 150;
 const lastPoints = new Map();   // "platform|league|side|playerId" -> points
 let changes = [];
 const statTracker = createStatTracker();   // attaches "+1 rec, +32 yds, TD" to point changes
+const history = createHistory(CACHE_DIR);   // win-probability samples for the week, on disk
 
 // Returns the set of player keys that produced a change this poll.
 function detectChanges(matchups, at) {
@@ -88,6 +90,7 @@ async function refresh() {
     const errors = [];
     try {
       const nfl = await getNflState();
+      await history.use(nfl.season, nfl.week);
       // Live stat feed runs alongside the league fetches; its failure never blocks points.
       const statsJob = getLiveStats(nfl.season, nfl.week).catch((e) => { console.warn("live stats unavailable:", e.message); return null; });
       const jobs = [];
@@ -99,7 +102,9 @@ async function refresh() {
       const moved = feed ? statTracker.ingest(feed, `${nfl.season}-${nfl.week}`) : new Set();
       const changed = detectChanges(matchups, updatedAt);
       backfillStats(moved, changed, updatedAt);
-      snapshot = { updatedAt, season: nfl.season, week: nfl.week, refreshSeconds: config.refreshSeconds, matchups, changes, errors };
+      const appended = history.record(matchups, Date.parse(updatedAt));
+      snapshot = { updatedAt, season: nfl.season, week: nfl.week, refreshSeconds: config.refreshSeconds, matchups, changes, history: history.thinned(), errors };
+      if (appended) await history.save().catch((e) => console.warn('history save:', e.message));
     } catch (e) {
       errors.push(`NFL scoreboard: ${e.message}`);
       snapshot = { ...snapshot, errors };

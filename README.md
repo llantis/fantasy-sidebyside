@@ -15,6 +15,9 @@ What's on the page:
 - **My key players** — on your team in 2+ leagues.
 - **Controversial** — on your team in one league and against you in another.
 - **Enemy key players** — started against you in 2+ leagues.
+- **Win probability over time** — a small chart under each matchup's score: your win% through the
+  week, tinted blue above 50 and orange below, with idle days collapsed. Hover for time, win% and score.
+  History is saved next to the config so it survives restarts.
 - **Recent changes** — every scoring change since the app started, newest first, with the effect on
   your margin in each league the player appears in (positive if he is yours, negative if he is against you).
   Each row shows what he did ("+1 rec, +32 yds, TD") from the live NFL stat feed and his week line;

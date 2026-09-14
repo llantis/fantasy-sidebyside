@@ -99,6 +99,19 @@ main { padding: 14px 18px 10px; }
 .wpbar .l { background: var(--me); transition: width .6s ease; }
 .wpbar .r { background: var(--opp); flex: 1; }
 
+/* win probability over time */
+.wpchart { height: 64px; background: var(--card2); border-top: 1px solid var(--line); }
+.wpchart svg { display: block; width: 100%; height: 64px; }
+.wpchart .line { fill: none; stroke: var(--me); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.wpchart .above { fill: var(--me); opacity: .12; }
+.wpchart .below { fill: var(--opp); opacity: .12; }
+.wpchart .mid { stroke: var(--line); stroke-width: 1; }
+.wpchart .gap { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 3 3; }
+.wpchart .day { fill: var(--dim); font-size: 10px; }
+.wpchart .now { fill: var(--me); stroke: var(--card2); stroke-width: 2; }
+.wpchart .cursor { stroke: var(--muted); stroke-width: 1; }
+.wpchart .readout { fill: var(--text); font-size: 10.5px; paint-order: stroke; stroke: var(--card2); stroke-width: 3px; }
+
 /* ---------- lineup rows ---------- */
 table { width: 100%; border-collapse: collapse; }
 tr { border-top: 1px solid var(--line); }
