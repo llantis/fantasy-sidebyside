@@ -239,11 +239,11 @@ function card(m) {
 }
 
 // =============================================================================
-// Win probability over time (one small SVG per card)
+// Win probability over time (one SVG per card, both teams)
 // =============================================================================
 
-const CH_H = 64, CH_PAD = { l: 4, r: 8, t: 6, b: 4 };
-const GAP_CAP = 15 * 60 * 1000;    // idle time longer than this is compressed to this width
+const CH_H = 140, CH_PAD = { l: 8, r: 44, t: 22, b: 18 };
+const GAP_CAP = 15 * 60 * 1000;      // idle time longer than this is compressed to this width
 const GAP_MARK = 2 * 60 * 60 * 1000; // ...and gets a divider + day label when longer than this
 
 const chartKey = (m) => `${m.platform}|${m.leagueId}|${m.week}`;
@@ -251,80 +251,101 @@ const chartKey = (m) => `${m.platform}|${m.leagueId}|${m.week}`;
 // Empty host; drawCharts() fills it after the card is in the DOM (the SVG needs a measured width).
 function chartHost(m) {
   const h = snap?.history?.[chartKey(m)];
-  return h && h.length >= 2 ? `<div class="wpchart" data-key="${esc(chartKey(m))}"></div>` : '';
+  if (!h || h.length < 2) return '';
+  return `<div class="wpchart" data-key="${esc(chartKey(m))}" data-me="${esc(m.me.teamName)}" data-opp="${esc(m.opp?.teamName ?? 'BYE')}"></div>`;
 }
 
-// x: cumulative time with long gaps capped; y: 0..100 top to bottom.
+// x: cumulative time with long gaps capped; y: 0..100 top to bottom, for both teams.
 function chartLayout(samples, W) {
   const xs = [0];
   const gaps = [];
   for (let i = 1; i < samples.length; i++) {
     const dt = samples[i].t - samples[i - 1].t;
     xs.push(xs[i - 1] + Math.min(dt, GAP_CAP));
-    if (dt > GAP_MARK) gaps.push({ xs: xs[i - 1] + GAP_CAP / 2, label: new Date(samples[i].t).toLocaleDateString([], { weekday: 'short' }) });
+    if (dt > GAP_MARK) gaps.push({ xs: xs[i - 1] + GAP_CAP / 2, at: i });
   }
   const total = Math.max(xs[xs.length - 1], 1);
   const innerW = W - CH_PAD.l - CH_PAD.r;
   const innerH = CH_H - CH_PAD.t - CH_PAD.b;
-  const px = xs.map((x) => CH_PAD.l + (x / total) * innerW);
-  const py = samples.map((s) => CH_PAD.t + ((100 - s.w) / 100) * innerH);
-  const y50 = CH_PAD.t + innerH / 2;
-  return { px, py, y50, gaps: gaps.map((g) => ({ x: CH_PAD.l + (g.xs / total) * innerW, label: g.label })) };
+  const X = (x) => CH_PAD.l + (x / total) * innerW;
+  const Y = (w) => CH_PAD.t + ((100 - w) / 100) * innerH;
+  const px = xs.map(X);
+  const day = (t) => new Date(t).toLocaleDateString([], { weekday: 'short' });
+  const ticks = [{ x: px[0], label: day(samples[0].t) }, ...gaps.map((g) => ({ x: px[g.at], label: day(samples[g.at].t) }))];
+  return {
+    px, pyMe: samples.map((s) => Y(s.w)), pyOpp: samples.map((s) => Y(100 - s.w)),
+    grid: [25, 50, 75].map((v) => ({ y: Y(v), label: `${v}%` })),
+    gaps: gaps.map((g) => ({ x: X(g.xs) })), ticks, Y,
+  };
 }
 
 function chartSvg(samples, W, id) {
   const L = chartLayout(samples, W);
   const n = samples.length - 1;
-  const pts = L.px.map((x, i) => `${x.toFixed(1)},${L.py[i].toFixed(1)}`).join(' ');
-  const poly = `${L.px[0].toFixed(1)},${L.y50.toFixed(1)} ${pts} ${L.px[n].toFixed(1)},${L.y50.toFixed(1)}`;
-  const gaps = L.gaps.map((g) =>
-    `<line class="gap" x1="${g.x.toFixed(1)}" x2="${g.x.toFixed(1)}" y1="${CH_PAD.t}" y2="${CH_H - CH_PAD.b}"/>` +
-    `<text class="day" x="${(g.x + 3).toFixed(1)}" y="${CH_H - 6}">${esc(g.label)}</text>`).join('');
-  return `<svg class="wpc" viewBox="0 0 ${W} ${CH_H}" width="100%" height="${CH_H}" role="img" aria-label="win probability over time">
-    <defs>
-      <clipPath id="${id}a"><rect x="0" y="0" width="${W}" height="${L.y50.toFixed(1)}"/></clipPath>
-      <clipPath id="${id}b"><rect x="0" y="${L.y50.toFixed(1)}" width="${W}" height="${(CH_H - L.y50).toFixed(1)}"/></clipPath>
-    </defs>
-    <polygon class="above" clip-path="url(#${id}a)" points="${poly}"/>
-    <polygon class="below" clip-path="url(#${id}b)" points="${poly}"/>
-    <line class="mid" x1="${CH_PAD.l}" x2="${W - CH_PAD.r}" y1="${L.y50.toFixed(1)}" y2="${L.y50.toFixed(1)}"/>
-    ${gaps}
-    <polyline class="line" points="${pts}"/>
-    <circle class="now" cx="${L.px[n].toFixed(1)}" cy="${L.py[n].toFixed(1)}" r="4"/>
-    <line class="cursor" x1="0" x2="0" y1="${CH_PAD.t}" y2="${CH_H - CH_PAD.b}" style="display:none"/>
-    <text class="readout num" x="0" y="13" style="display:none"></text>
+  const f = (v) => v.toFixed(1);
+  const pts = (py) => L.px.map((x, i) => `${f(x)},${f(py[i])}`).join(' ');
+  const grid = L.grid.map((g) =>
+    `<line class="grid" x1="${CH_PAD.l}" x2="${W - CH_PAD.r}" y1="${f(g.y)}" y2="${f(g.y)}"/>` +
+    `<text class="ylab num" x="${W - CH_PAD.r + 8}" y="${f(g.y + 3.5)}">${g.label}</text>`).join('');
+  const gaps = L.gaps.map((g) => `<line class="gap" x1="${f(g.x)}" x2="${f(g.x)}" y1="${CH_PAD.t}" y2="${CH_H - CH_PAD.b}"/>`).join('');
+  const ticks = L.ticks.map((t) => `<text class="xlab" x="${f(t.x + 2)}" y="${CH_H - 5}">${esc(t.label)}</text>`).join('');
+  return `<svg class="wpc" viewBox="0 0 ${W} ${CH_H}" width="100%" height="${CH_H}" role="img" aria-label="win probability over time, both teams">
+    ${grid}${gaps}${ticks}
+    <polyline class="line opp" points="${pts(L.pyOpp)}"/>
+    <polyline class="line me" points="${pts(L.pyMe)}"/>
+    <circle class="now opp" cx="${f(L.px[n])}" cy="${f(L.pyOpp[n])}" r="4"/>
+    <circle class="now me" cx="${f(L.px[n])}" cy="${f(L.pyMe[n])}" r="4"/>
+    <g class="hover" style="display:none">
+      <line class="cursor" x1="0" x2="0" y1="${CH_PAD.t - 4}" y2="${CH_H - CH_PAD.b}"/>
+      <text class="tlab" x="0" y="13"></text>
+      <circle class="hdot opp" r="4.5"/><circle class="hdot me" r="4.5"/>
+      <text class="hlab opp"><tspan class="tn"></tspan><tspan class="tv"></tspan></text>
+      <text class="hlab me"><tspan class="tn"></tspan><tspan class="tv"></tspan></text>
+    </g>
   </svg>`;
 }
 
-// Crosshair snaps to the nearest sample; readout shows time, win% and score.
-function wireChartHover(svg, samples, W) {
+// Crosshair snaps to the nearest sample: time on top, each team's name + win% beside its dot.
+function wireChartHover(svg, samples, W, names) {
   const L = chartLayout(samples, W);
-  const cursor = svg.querySelector('.cursor');
-  const readout = svg.querySelector('.readout');
+  const g = svg.querySelector('.hover');
+  const q = (sel) => svg.querySelector(sel);
   const when = (t) => new Date(t).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const place = (side, x, y, flip, nudge, name, val) => {
+    const dot = q(`.hdot.${side}`), lab = q(`.hlab.${side}`);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+    lab.setAttribute('x', flip ? x - 9 : x + 9); lab.setAttribute('y', y + 4 + nudge);
+    lab.setAttribute('text-anchor', flip ? 'end' : 'start');
+    lab.querySelector('.tn').textContent = `${name} `;
+    lab.querySelector('.tv').textContent = `${val}%`;
+  };
   svg.addEventListener('mousemove', (ev) => {
     const rect = svg.getBoundingClientRect();
     const x = ((ev.clientX - rect.left) * W) / rect.width;
     let i = 0;
     for (let k = 1; k < L.px.length; k++) if (Math.abs(L.px[k] - x) < Math.abs(L.px[i] - x)) i = k;
     const s = samples[i];
-    cursor.setAttribute('x1', L.px[i]); cursor.setAttribute('x2', L.px[i]); cursor.style.display = '';
-    readout.textContent = `${when(s.t)} · ${s.w}% · ${fmt(s.a)}–${fmt(s.b)}`;
-    const flip = L.px[i] > W / 2;
-    readout.setAttribute('x', flip ? L.px[i] - 6 : L.px[i] + 6);
-    readout.setAttribute('text-anchor', flip ? 'end' : 'start');
-    readout.style.display = '';
+    const cx = L.px[i], yMe = L.pyMe[i], yOpp = L.pyOpp[i];
+    const flip = cx > W * 0.6;
+    q('.cursor').setAttribute('x1', cx); q('.cursor').setAttribute('x2', cx);
+    const t = q('.tlab'); t.textContent = when(s.t); t.setAttribute('x', flip ? cx - 6 : cx + 6); t.setAttribute('text-anchor', flip ? 'end' : 'start');
+    // near 50% the two dots sit on top of each other: push the labels apart
+    const close = Math.abs(yMe - yOpp) < 16;
+    const meUp = yMe <= yOpp;
+    place('me', cx, yMe, flip, close ? (meUp ? -8 : 8) : 0, names.me, s.w);
+    place('opp', cx, yOpp, flip, close ? (meUp ? 8 : -8) : 0, names.opp, 100 - s.w);
+    g.style.display = '';
   });
-  svg.addEventListener('mouseleave', () => { cursor.style.display = 'none'; readout.style.display = 'none'; });
+  svg.addEventListener('mouseleave', () => { g.style.display = 'none'; });
 }
 
 function drawCharts() {
   document.querySelectorAll('.wpchart').forEach((el, i) => {
     const samples = snap?.history?.[el.dataset.key];
     if (!samples || samples.length < 2) return;
-    const W = Math.max(200, Math.round(el.clientWidth || 600));
+    const W = Math.max(240, Math.round(el.clientWidth || 600));
     el.innerHTML = chartSvg(samples, W, `wpc${i}`);
-    wireChartHover(el.querySelector('svg'), samples, W);
+    wireChartHover(el.querySelector('svg'), samples, W, { me: el.dataset.me, opp: el.dataset.opp });
   });
 }
 let resizeTimer = null;
